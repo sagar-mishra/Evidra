@@ -1,0 +1,81 @@
+"""Pydantic validation models and Instructor schemas."""
+
+from app.schemas.findings import (
+    ConstrainedFinding,
+    RequirementMapping,
+    StrictFindingSchema,
+    StructuredPlcChange,
+)
+from app.schemas.change_models import (
+    CHANGE_CLASSES,
+    BehavioralChange,
+    ChangeClass,
+    DiffArtifactType,
+    DiffOperation,
+    DiffReport,
+    DiffSummary,
+    NormalizedIdentity,
+)
+from app.schemas.mapping import (
+    HybridSearchHit,
+    HybridSearchResult,
+    MappingReport,
+    RequirementCategory,
+    RequirementExtractionResult,
+    RequirementPriority,
+    RequirementTagMapping,
+    StructuredRequirement,
+    TagIndexRecord,
+)
+from app.schemas.review import (
+    AnalyzeResponse,
+    FindingsSummary,
+    MockFindingsResponse,
+    ReviewItem,
+    ReviewStatus,
+    Severity,
+    build_findings_summary,
+)
+from app.schemas.tests import (
+    GenerateTestRequest,
+    GenerateTestResponse,
+    RegressionTestSchema,
+    TestCategory,
+    TestStep,
+)
+
+__all__ = [
+    "CHANGE_CLASSES",
+    "BehavioralChange",
+    "ChangeClass",
+    "ConstrainedFinding",
+    "StrictFindingSchema",
+    "DiffArtifactType",
+    "DiffOperation",
+    "DiffReport",
+    "DiffSummary",
+    "GenerateTestRequest",
+    "GenerateTestResponse",
+    "HybridSearchHit",
+    "HybridSearchResult",
+    "MappingReport",
+    "AnalyzeResponse",
+    "FindingsSummary",
+    "MockFindingsResponse",
+    "NormalizedIdentity",
+    "RegressionTestSchema",
+    "RequirementCategory",
+    "RequirementExtractionResult",
+    "RequirementMapping",
+    "RequirementPriority",
+    "RequirementTagMapping",
+    "ReviewItem",
+    "ReviewStatus",
+    "Severity",
+    "StructuredPlcChange",
+    "StructuredRequirement",
+    "TagIndexRecord",
+    "TestCategory",
+    "TestStep",
+    "build_findings_summary",
+]

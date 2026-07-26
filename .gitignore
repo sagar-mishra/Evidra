@@ -1,0 +1,30 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets & local env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Deploy artifacts
+deploy-output.txt
+Dockerfile
+!backend/Dockerfile
+!frontend/Dockerfile
+
+# Node
+frontend/node_modules/
+frontend/.next/
+
+#sample data
+sample_data/
+data-use-case/
