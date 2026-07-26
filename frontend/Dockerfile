@@ -33,7 +33,13 @@ WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    RUNNING_IN_CONTAINER=true \
+    USERS_CSV_PATH=/app/data/users.csv
+
+# Local-file fallback CSV location (production prefers Azure Blob when configured)
+RUN mkdir -p /app/data \
+    && printf 'id,username,password,role,createdAt\n' > /app/data/users.csv
 
 # Next.js production server needs these artifacts
 COPY --from=builder /app/package.json ./package.json

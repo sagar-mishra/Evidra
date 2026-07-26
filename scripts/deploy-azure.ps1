@@ -439,9 +439,25 @@ Assert-Command "az"
 Assert-Command "docker"
 Assert-Command "curl.exe"
 
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $dockerInfo = docker info 2>&1
-if ($LASTEXITCODE -ne 0) {
-    throw "Docker is not running. Start Docker Desktop (Linux containers) and retry."
+$dockerOk = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEap
+if (-not $dockerOk) {
+    $msg = @(
+        "Docker Desktop is not running (or the Linux engine is not ready)."
+        ""
+        "Fix:"
+        "  1. Start Docker Desktop from the Start menu"
+        "  2. Wait until it says Docker Desktop is running (whale icon steady)"
+        "  3. Confirm Linux containers (not Windows containers)"
+        "  4. Test:  docker info"
+        "  5. Re-run:  powershell -ExecutionPolicy Bypass -File .\scripts\deploy-azure.ps1"
+        ""
+        "Details: dockerDesktopLinuxEngine pipe missing."
+    ) -join "`n"
+    throw $msg
 }
 Write-Ok "Docker is running"
 
@@ -462,6 +478,11 @@ $LLM_MODEL_NAME = Get-EnvOrDefault -Map $dotenv -Key "LLM_MODEL_NAME" -Default "
 $LLM_REASONING_MODEL = Get-EnvOrDefault -Map $dotenv -Key "LLM_REASONING_MODEL" -Default "anthropic/claude-3-5-sonnet-20240620"
 $QDRANT_IN_MEMORY = Get-EnvOrDefault -Map $dotenv -Key "QDRANT_IN_MEMORY" -Default "false"
 $QDRANT_TIMEOUT = Get-EnvOrDefault -Map $dotenv -Key "QDRANT_TIMEOUT" -Default "120"
+$ADMIN_USERNAME = Get-EnvOrDefault -Map $dotenv -Key "ADMIN_USERNAME" -Default "admin"
+$ADMIN_PASSWORD = Get-EnvOrDefault -Map $dotenv -Key "ADMIN_PASSWORD" -Default "admin"
+$AZURE_STORAGE_CONNECTION_STRING = Get-EnvOrDefault -Map $dotenv -Key "AZURE_STORAGE_CONNECTION_STRING"
+$USERS_CSV_CONTAINER = Get-EnvOrDefault -Map $dotenv -Key "USERS_CSV_CONTAINER" -Default "evidra-auth"
+$USERS_CSV_BLOB = Get-EnvOrDefault -Map $dotenv -Key "USERS_CSV_BLOB" -Default "users.csv"
 
 if ($LLM_PROVIDER -eq "anthropic" -and -not $ANTHROPIC_API_KEY) {
     if ($OPENAI_API_KEY) {
@@ -624,8 +645,86 @@ if ($deployFrontend) {
         -RegistryName $ACR `
         -AcrCreds $acrCreds
 
+    # Shared users.csv via Azure Blob (same file after every redeploy / scale)
+    if (-not $AZURE_STORAGE_CONNECTION_STRING) {
+        Write-Step "Ensure Azure Storage for shared users.csv"
+        Ensure-Provider -Namespace "Microsoft.Storage"
+
+        # Prefer an existing storage account in this RG (any evidra* account)
+        $existingSa = Invoke-AzQuiet -AzArgs @(
+            "storage", "account", "list",
+            "--resource-group", $ResourceGroup,
+            "--query", "[?starts_with(name, 'evidra')].name | [0]",
+            "-o", "tsv"
+        )
+        $storageName = $existingSa.Text
+
+        if (-not $storageName) {
+            # Storage account names: 3-24 lowercase alphanumeric, globally unique
+            $suffix = -join ((97..122) + (48..57) | Get-Random -Count 8 | ForEach-Object { [char]$_ })
+            $storageName = ("evidra" + $suffix)
+            if ($storageName.Length -gt 24) { $storageName = $storageName.Substring(0, 24) }
+
+            Write-WarnLine ("Creating storage account: " + $storageName)
+            $create = Invoke-AzQuiet -AzArgs @(
+                "storage", "account", "create",
+                "--name", $storageName,
+                "--resource-group", $ResourceGroup,
+                "--location", $Location,
+                "--sku", "Standard_LRS",
+                "--kind", "StorageV2",
+                "--allow-blob-public-access", "false"
+            )
+            if ($create.ExitCode -ne 0) {
+                # Name may be taken globally - retry with another suffix
+                $suffix2 = -join ((97..122) + (48..57) | Get-Random -Count 10 | ForEach-Object { [char]$_ })
+                $storageName = ("ev" + $suffix2)
+                if ($storageName.Length -gt 24) { $storageName = $storageName.Substring(0, 24) }
+                Write-WarnLine ("Retry create storage account: " + $storageName)
+                az storage account create `
+                    --name $storageName `
+                    --resource-group $ResourceGroup `
+                    --location $Location `
+                    --sku Standard_LRS `
+                    --kind StorageV2 `
+                    --allow-blob-public-access false | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    throw ("Failed to create storage account for users.csv. Create one manually and set AZURE_STORAGE_CONNECTION_STRING in .env")
+                }
+            }
+        }
+        else {
+            Write-Ok ("Using existing storage account: " + $storageName)
+        }
+
+        $connProbe = Invoke-AzQuiet -AzArgs @(
+            "storage", "account", "show-connection-string",
+            "--name", $storageName,
+            "--resource-group", $ResourceGroup,
+            "--query", "connectionString",
+            "-o", "tsv"
+        )
+        $AZURE_STORAGE_CONNECTION_STRING = $connProbe.Text
+        if (-not $AZURE_STORAGE_CONNECTION_STRING) {
+            throw ("Could not read connection string for storage account " + $storageName)
+        }
+        Write-Ok ("Storage account ready: " + $storageName)
+        Write-Ok ("Shared users CSV blob: " + $USERS_CSV_CONTAINER + "/" + $USERS_CSV_BLOB)
+    }
+
     Write-Step ("Deploy frontend Container App (" + $FrontendName + ")")
-    $feEnv = @("NEXT_PUBLIC_API_URL=" + $BACKEND_URL)
+    $feEnv = @(
+        ("NEXT_PUBLIC_API_URL=" + $BACKEND_URL)
+        ("ADMIN_USERNAME=" + $ADMIN_USERNAME)
+        ("ADMIN_PASSWORD=" + $ADMIN_PASSWORD)
+        ("USERS_CSV_PATH=/app/data/users.csv")
+        ("USERS_CSV_CONTAINER=" + $USERS_CSV_CONTAINER)
+        ("USERS_CSV_BLOB=" + $USERS_CSV_BLOB)
+        ("RUNNING_IN_CONTAINER=true")
+    )
+    if ($AZURE_STORAGE_CONNECTION_STRING) {
+        $feEnv += ("AZURE_STORAGE_CONNECTION_STRING=" + $AZURE_STORAGE_CONNECTION_STRING)
+    }
     Deploy-OrUpdateContainerApp `
         -Name $FrontendName `
         -Rg $ResourceGroup `
@@ -643,10 +742,11 @@ if ($deployFrontend) {
 
     $FRONTEND_URL = Get-ContainerAppUrl -Name $FrontendName -Rg $ResourceGroup
     Write-Ok ("Frontend URL: " + $FRONTEND_URL)
+    Write-Ok "User logins persist in Azure Blob users.csv (shared across restarts)."
 
     if (Test-ContainerAppExists -Name $BackendName -Rg $ResourceGroup) {
         Write-Step "Patch backend CORS for frontend origin"
-        $cors = "http://localhost:3000,http://127.0.0.1:3000," + $FRONTEND_URL
+        $cors = "http://localhost:3000,https://evidrahq.com,http://127.0.0.1:3000," + $FRONTEND_URL
         az containerapp update `
             --name $BackendName `
             --resource-group $ResourceGroup `

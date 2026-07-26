@@ -1,9 +1,11 @@
-# Industrial Controls Release Assurance
+# Evidra
 
-Read-only, human-reviewed release audit tool for Rockwell PLC (L5X) projects.  
-Compares baseline vs revised controller exports, maps changes to SOO/FDS requirements, drafts focused regression tests, and supports engineer Accept / Reject / Edit / Unresolved review before PDF/CSV export.
+**Every change, proven before production.**
 
-**Stack:** Python FastAPI backend · Next.js 14 frontend · Qdrant hybrid search · LiteLLM + Instructor (OpenAI by default, Ollama/vLLM optional)
+Industrial Controls Release Assurance for Rockwell PLC (L5X) projects.  
+Compares baseline vs revised controller exports, maps changes to governing requirements, and produces evidence-backed regression tests for engineer review.
+
+**Stack:** Python FastAPI backend · Next.js 14 frontend · Qdrant hybrid search · LiteLLM + Instructor (Anthropic / OpenAI / Gemini)
 
 ---
 
@@ -11,13 +13,15 @@ Compares baseline vs revised controller exports, maps changes to SOO/FDS require
 
 - **Python 3.12+** and [uv](https://github.com/astral-sh/uv)
 - **Node.js 18+** and npm (frontend)
-- **OpenAI API key** (default hybrid config), *or* local Ollama for offline LLM/embeddings
+- **Docker Desktop** (for Azure deploy — Linux containers)
+- **Azure CLI** (`az`) logged in (for deploy)
+- API keys in root `.env` (see `.env.example`)
 
 ---
 
 ## 1. Setup
 
-### Backend
+### Backend / monorepo env
 
 ```powershell
 # From project root
@@ -26,9 +30,23 @@ cd D:\AI-Projects\AI-Automation
 # Install Python dependencies
 uv sync
 
-# Configure environment (backend/.env.example or monorepo root)
+# Configure environment
 copy .env.example .env
-# Edit .env — set OPENAI_API_KEY, optional QDRANT_URL / QDRANT_API_KEY
+# Edit .env — set API keys, Qdrant, ADMIN_USERNAME / ADMIN_PASSWORD
+```
+
+Important root `.env` keys:
+
+```env
+ANTHROPIC_API_KEY=...
+OPENAI_API_KEY=...
+QDRANT_URL=...
+QDRANT_API_KEY=...
+LLM_PROVIDER=anthropic
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL_NAME=text-embedding-3-small
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-strong-password
 ```
 
 ### Frontend
@@ -39,11 +57,18 @@ copy .env.example .env.local
 npm install
 ```
 
-`NEXT_PUBLIC_API_URL` defaults to `http://localhost:8000` (see `frontend/.env.example`).
+`NEXT_PUBLIC_API_URL` defaults to `http://127.0.0.1:8000` (prefer `127.0.0.1` on Windows, not `localhost`).
+
+Also set in `frontend/.env.local` (for local Next.js admin login):
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-strong-password
+```
 
 ---
 
-## 2. Run the application
+## 2. Run locally
 
 Use **two terminals** (backend + frontend).
 
@@ -65,23 +90,74 @@ cd D:\AI-Projects\AI-Automation\frontend
 npm run dev
 ```
 
-- UI: [http://localhost:3000](http://localhost:3000)
+- Landing: [http://localhost:3000](http://localhost:3000)
+- Sign in: [http://localhost:3000/login](http://localhost:3000/login) → workspace `/dashboard`
+- Admin (not linked in UI): [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
 
-Open the UI in your browser:
+### Local workflow
 
-1. **Upload** baseline L5X, revised L5X, and SOO PDF/DOCX → **Run Analysis**
-2. Wait for the pipeline (diff → mapping → AI tests)
-3. Review findings in the 3-pane workspace (queue · diff/SOO · test plan)
-4. Accept / Reject / Edit · **Export PDF + CSV**
+1. Sign in (users are created by Admin; no default engineer user)
+2. Upload baseline L5X, revised L5X, and governing docs → **Run Analysis**
+3. Review findings (Confirm / Dismiss / Needs Investigation)
+4. **Export PDF + CSV**
 
-Optional: use **Load demo findings** on the upload screen to skip upload and use mock data.
+Optional: **Load sample review** on the upload screen for demo findings without upload.
 
 ---
 
-## 3. Optional: local LLM (Ollama) instead of OpenAI
+## 3. Azure deployment (PowerShell)
+
+One-command deploy from the **monorepo root** (builds images locally with Docker, pushes to ACR, updates Azure Container Apps):
 
 ```powershell
-# Pull and run a local model
+cd D:\AI-Projects\AI-Automation
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy-azure.ps1
+```
+
+### Optional variants
+
+```powershell
+# Backend only
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy-azure.ps1 -BackendOnly
+
+# Frontend only
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy-azure.ps1 -FrontendOnly
+```
+
+### What the script does
+
+1. Registers Azure resource providers if needed  
+2. Builds & pushes **backend** + **frontend** Docker images (no ACR Tasks)  
+3. Creates/updates Container Apps  
+4. Sets backend env from root `.env` (API keys, LLM, embeddings, Qdrant)  
+5. Sets frontend env including:
+   - `NEXT_PUBLIC_API_URL` (backend URL)
+   - `ADMIN_USERNAME` / `ADMIN_PASSWORD` (from root `.env`)
+   - `AZURE_STORAGE_CONNECTION_STRING` (auto-created storage for shared `users.csv`)
+6. Writes URLs to `deploy-output.txt`
+
+### Prerequisites for deploy
+
+- Docker Desktop running (Linux containers)
+- `az login` already done
+- Root `.env` filled (API keys + admin credentials)
+
+### After deploy
+
+```powershell
+Get-Content .\deploy-output.txt
+```
+
+- Open **FrontendUrl** for the landing page  
+- Sign in at `/login` (users created via Admin)  
+- Admin portal (unlisted): `https://<FrontendUrl>/admin/login`  
+- Backend health: `https://<BackendUrl>/api/v1/health`
+
+---
+
+## 4. Optional: local LLM (Ollama)
+
+```powershell
 ollama pull llama3.1
 ollama serve
 ```
@@ -93,42 +169,30 @@ LLM_PROVIDER=ollama
 LLM_MODEL_NAME=llama3.1
 LLM_API_BASE=http://localhost:11434
 EMBEDDING_PROVIDER=local
-# OPENAI_API_KEY can be left empty when fully local
 ```
 
 Then start backend + frontend as in section 2.
 
 ---
 
-## 4. Validation / benchmark scripts
+## 5. Validation / benchmark scripts
 
 Run from the **project root** after `uv sync`.
 
 ```powershell
-# Milestone 1 — L5X + SOO ingestion
 uv run python backend/tests/test_ingestion.py
-
-# Milestone 2 — Deterministic L5X diff
 uv run python backend/tests/test_diff.py
-
-# Milestone 3 — Qdrant hybrid mapping (local dense for smoke test)
 uv run python backend/tests/test_mapping.py
-
-# Milestone 4 — LLM regression test generation (needs OpenAI or Ollama)
 uv run python backend/tests/test_generation.py
-
-# Milestone 6 — End-to-end benchmark vs ground_truth.json
 uv run python backend/tests/test_benchmark.py
 ```
 
 Benchmark options:
 
 ```powershell
-# Faster: skip LLM generation stage
 $env:BENCHMARK_SKIP_LLM = "1"
 uv run python backend/tests/test_benchmark.py
 
-# Cap number of LLM generations
 $env:BENCHMARK_LLM_LIMIT = "4"
 uv run python backend/tests/test_benchmark.py
 ```
@@ -137,30 +201,23 @@ Report output: `sample_data/VALIDATION_REPORT.md`
 
 ---
 
-## 5. Docker (Azure Container Apps prep)
-
-Build from the **monorepo root** (backend) and **frontend/** context:
+## 6. Manual Docker builds (optional)
 
 ```powershell
 # Backend API image
-docker build -f backend/Dockerfile -t release-assurance-api .
+docker build -f backend/Dockerfile -t evidra-api .
 
 # Frontend image (bake production API URL at build time)
 docker build -f frontend/Dockerfile `
   --build-arg NEXT_PUBLIC_API_URL=https://your-api.azurecontainerapps.io `
-  -t release-assurance-web ./frontend
+  -t evidra-web ./frontend
 ```
 
-Run locally:
+Prefer `.\scripts\deploy-azure.ps1` for full Azure deploy.
 
-```powershell
-docker run --rm -p 8000:8000 --env-file .env release-assurance-api
-docker run --rm -p 3000:3000 release-assurance-web
-```
+---
 
-Qdrant: set `QDRANT_URL` + `QDRANT_API_KEY` for Qdrant Cloud; leave the key empty for local unauthenticated Qdrant at `http://localhost:6333`.
-
-## 6. Project layout
+## 7. Project layout
 
 ```
 sample_data/           # DC1 benchmark L5X, SOO, ground_truth.json
@@ -170,32 +227,40 @@ backend/
     api/               # Routes
     core/              # config.py (pydantic-settings)
     schemas/           # Pydantic models
-    services/          # Deterministic parse/diff
+    services/          # Parse / diff / ingestion / rules
     ai/                # Qdrant, LiteLLM, embeddings
-  tests/               # Milestone validation scripts
+  tests/
 frontend/
-  src/app/             # Next.js 14 App Router UI
-  src/lib/             # zustand store, export utilities
+  src/app/             # Landing, login, dashboard, admin
+  src/lib/             # auth (users.csv / Azure blob), API client, export
+scripts/
+  deploy-azure.ps1     # One-command Azure Container Apps deploy
 ```
 
 ---
 
-## 7. Environment variables (summary)
+## 8. Environment variables (summary)
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `OPENAI_API_KEY` | — | OpenAI LLM/embeddings |
-| `QDRANT_URL` | `http://localhost:6333` | Qdrant HTTP endpoint |
-| `QDRANT_API_KEY` | empty | Set for Qdrant Cloud; omit for local |
-| `LLM_PROVIDER` | `openai` | `openai` \| `ollama` \| `vllm` \| `local` |
-| `LLM_MODEL_NAME` | `gpt-4o-mini` | Chat model name |
-| `EMBEDDING_PROVIDER` | `openai` | `openai` (1536-d) \| `local` (384-d BAAI) |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Frontend → backend base URL |
+| Variable | Purpose |
+|----------|---------|
+| `ANTHROPIC_API_KEY` | Claude LLM (default provider) |
+| `OPENAI_API_KEY` | Embeddings / OpenAI LLM fallback |
+| `GEMINI_API_KEY` | Gemini LLM/embeddings optional |
+| `VOYAGE_API_KEY` | Voyage embeddings optional |
+| `LLM_PROVIDER` | `anthropic` \| `openai` \| `gemini` \| … |
+| `LLM_MODEL_NAME` | Fast model |
+| `LLM_REASONING_MODEL` | Strong reasoning model |
+| `EMBEDDING_PROVIDER` | `openai` \| `voyage` \| `gemini` \| `local` |
+| `EMBEDDING_MODEL_NAME` | e.g. `text-embedding-3-small` |
+| `QDRANT_URL` / `QDRANT_API_KEY` | Vector store |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Frontend admin portal |
+| `AZURE_STORAGE_CONNECTION_STRING` | Shared `users.csv` on Azure (auto on deploy) |
+| `NEXT_PUBLIC_API_URL` | Frontend → backend URL |
 
-See `backend/.env.example`, `frontend/.env.example`, and root `.env.example`.
+See root `.env.example`, `backend/.env.example`, and `frontend/.env.example`.
 
 ---
 
 ## Safety note
 
-This product is a **read-only, human-reviewed** audit aid. It never connects to live controllers, never auto-approves a release, and must not be used as operational control code. A qualified engineer must explicitly accept or reject all findings.
+This product is a **read-only, human-reviewed** audit aid. It never connects to live controllers, never auto-approves a release, and must not be used as operational control code. A qualified engineer must explicitly confirm or dismiss all findings.

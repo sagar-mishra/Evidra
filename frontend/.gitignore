@@ -28,6 +28,9 @@ yarn-error.log*
 # local env files
 .env*.local
 
+# App user credentials (created by admin — do not commit secrets)
+/data/users.csv
+
 # vercel
 .vercel
 
