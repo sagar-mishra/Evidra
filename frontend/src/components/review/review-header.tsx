@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { ProductNavActions } from "@/components/product/product-nav-actions";
 import { Button } from "@/components/ui/button";
 import { exportPackage } from "@/lib/export";
 import { computeStats, useReviewStore } from "@/lib/store";
@@ -75,6 +76,7 @@ export function ReviewHeader() {
               Human review required — no autonomous approval
             </div>
           </div>
+          <ProductNavActions variant="dark" />
           <Button
             size="sm"
             variant="outline"

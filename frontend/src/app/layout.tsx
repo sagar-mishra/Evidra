@@ -14,7 +14,10 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Evidra",
+  title: {
+    default: "Evidra",
+    template: "%s | Evidra",
+  },
   description: "Every change, proven before production.",
   icons: {
     icon: "/logo.png",
@@ -28,9 +31,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="scroll-smooth">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-slate-950 font-sans antialiased`}
+        style={{ fontFamily: "var(--font-geist-sans), system-ui, sans-serif" }}
       >
         {children}
       </body>
