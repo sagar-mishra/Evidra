@@ -240,45 +240,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* TEAM */}
-      <section
-        id="team"
-        className="scroll-mt-20 border-b border-slate-900 bg-slate-900/40"
-      >
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-          <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Built by controls, product and AI engineers.
-          </h2>
-          <p className="mt-4 max-w-3xl text-base leading-relaxed text-slate-300 sm:text-lg">
-            Rahul has more than five years of industrial-controls experience
-            across PLC programming, SCADA, FAT, commissioning, mining, utilities,
-            industrial processing and mission-critical data centers. Sagar builds
-            the L5X analysis, backend, AI, evaluation and deployment systems. Arun
-            owns technical product requirements, release quality, testing and
-            evaluation delivery. Abhijna owns customer research, outbound and
-            acquisition operations.
-          </p>
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { name: "Rahul", role: "Controls & domain" },
-              { name: "Sagar", role: "Platform, AI & deploy" },
-              { name: "Arun", role: "Product & quality" },
-              { name: "Abhijna", role: "GTM & research" },
-            ].map((m) => (
-              <div
-                key={m.name}
-                className="rounded-lg border border-slate-800 bg-slate-950/70 px-4 py-3"
-              >
-                <div className="font-semibold text-white">{m.name}</div>
-                <div className="font-mono text-[11px] uppercase tracking-wide text-slate-500">
-                  {m.role}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <footer className="bg-slate-950">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-8 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-2">

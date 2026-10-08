@@ -8,7 +8,6 @@ const LINKS = [
   { href: "#how-it-works", label: "How it Works" },
   { href: "#capabilities", label: "Capabilities" },
   { href: "#trust", label: "Trust" },
-  { href: "#team", label: "Team" },
 ];
 
 export function SiteNav() {
